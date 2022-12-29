@@ -4,11 +4,13 @@
 fn orig_test() {
     let main_text = "Microsoft surpassed expectations on the top and bottom lines, but cloud revenue was lower than expected, and the company's quarterly guidance fell short of expectations as well.";
     let terms = ["yahoo", "oracle", "microsoft", "funny", "7645674"];
-    let loops = 64_000_000;
 
-    for term in terms {
-        let speed = basic_search(main_text, term, loops);
-        println!("Searched for {} at {} MB/s", term, speed)
+    for million_loops in [48, 64] {
+        println!("\n{}M loops:", million_loops);
+        for term in terms {
+            let speed = basic_search(main_text, term, million_loops * 1_000_000);
+            println!("Searched for {:?} at {} MB/s", term, speed);
+        }
     }
 }
 
