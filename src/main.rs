@@ -17,7 +17,7 @@ fn basic_search(main_text: &str, term: &str, loops: u32) -> usize {
 
     let start = std::time::Instant::now();
     for _ in 0..loops {
-        let _ = find(main_text, term);
+        assert!(!find(main_text, term));
     }
 
     total_size / start.elapsed().as_secs() as usize
