@@ -4,7 +4,6 @@
 fn orig_test() {
     let main_text = "Microsoft surpassed expectations on the top and bottom lines, but cloud revenue was lower than expected, and the company's quarterly guidance fell short of expectations as well.";
     let terms = ["yahoo", "oracle", "microsoft", "funny", "7645674"];
-    // let loops = 28_000_000;
     let loops = 64_000_000;
 
     for term in terms {
@@ -24,16 +23,32 @@ fn basic_search(main_text: &str, term: &str, loops: u32) -> usize {
     total_size / start.elapsed().as_secs() as usize
 }
 
-#[inline(always)]
-#[cfg(target_arch = "x86_64")]
 fn find(haystack: &str, needle: &str) -> bool {
-    memchr::memmem::find(haystack.as_bytes(), needle.as_bytes()).is_some()
-}
-
-#[inline(always)]
-#[cfg(not(target_arch = "x86_64"))]
-fn find(haystack: &str, needle: &str) -> bool {
+    /*
+    // 64M loops:
+    // Searched for yahoo at 2700 MB/s
+    // Searched for oracle at 2700 MB/s
+    // Searched for microsoft at 2700 MB/s
+    // Searched for funny at 2700 MB/s
+    // Searched for 7645674 at 3601 MB/s
     haystack.contains(needle)
+    */
+
+    // 48M loops:
+    // Searched for yahoo at 8102 MB/s
+    // Searched for oracle at 8102 MB/s
+    // Searched for microsoft at 8102 MB/s
+    // Searched for funny at 8102 MB/s
+    // Searched for 7645674 at 8102 MB/s
+    //
+    // 64M loops:
+    // Searched for yahoo at 10803 MB/s
+    // Searched for oracle at 10803 MB/s
+    // Searched for microsoft at 5401 MB/s
+    // Searched for funny at 10803 MB/s
+    // Searched for 7645674 at 10803 MB/s
+    // Searched for well at 10803 MB/s
+    memchr::memmem::find(haystack.as_bytes(), needle.as_bytes()).is_some()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
