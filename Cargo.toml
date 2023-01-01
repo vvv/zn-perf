@@ -2,12 +2,14 @@
 name = "zn-perf"
 version = "0.1.0"
 edition = "2021"
+description = "Performance experiments for the Zinc Labs' log search engine"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { version = "4.0", features = ["derive"] }
 # memchr = "2.5"
-parquet = "29.0"
+# parquet = "29.0"
 
 [dev-dependencies]
 criterion = "0.4"
