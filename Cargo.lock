@@ -988,6 +988,7 @@ dependencies = [
  "num-bigint",
  "paste",
  "seq-macro",
+ "serde_json",
  "snap",
  "thrift",
  "twox-hash",
