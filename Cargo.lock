@@ -1497,6 +1497,7 @@ dependencies = [
  "clap 4.0.32",
  "criterion",
  "memchr",
+ "once_cell",
  "parquet",
  "thiserror",
 ]

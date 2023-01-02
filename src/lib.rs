@@ -36,9 +36,13 @@ pub fn read_all_data<R: FileReader>(file_reader: &R) -> ZnResult<()> {
     Ok(())
 }
 
-/// Returns the projection of byte array columns, i.e., columns with physical
-/// type being either [`BasicType::BYTE_ARRAY`] or
-/// [`BasicType::FIXED_LEN_BYTE_ARRAY`].
+fn is_byte_array(t: BasicType) -> bool {
+    matches!(t, BasicType::BYTE_ARRAY | BasicType::FIXED_LEN_BYTE_ARRAY)
+}
+
+/// Returns the projection of [byte array] columns.
+///
+/// [byte_array]: is_byte_array()
 fn byte_array_columns(metadata: &ParquetMetaData) -> SchemaType {
     match metadata.file_metadata().schema().clone() {
         SchemaType::PrimitiveType { .. } => unimplemented!(),
@@ -46,15 +50,25 @@ fn byte_array_columns(metadata: &ParquetMetaData) -> SchemaType {
             basic_info,
             mut fields,
         } => {
-            fields.retain(|t| {
-                matches!(
-                    t.get_physical_type(),
-                    BasicType::BYTE_ARRAY | BasicType::FIXED_LEN_BYTE_ARRAY
-                )
-            });
+            fields.retain(|t| is_byte_array(t.get_physical_type()));
             SchemaType::GroupType { basic_info, fields }
         }
     }
+}
+
+/// Returns total byte size of uncompressed data of all [byte array] columns.
+///
+/// [byte_array]: is_byte_array()
+pub fn byte_array_columns_uncompressed_size(metadata: &ParquetMetaData) -> u64 {
+    let mut size = 0;
+    for row_group in metadata.row_groups() {
+        size += row_group
+            .columns()
+            .iter()
+            .filter_map(|col| is_byte_array(col.column_type()).then(|| col.uncompressed_size()))
+            .sum::<i64>();
+    }
+    size.try_into().expect("BUG")
 }
 
 /// Counts the occurrences of `needle` in all `BYTE ARRAY` columns of the
