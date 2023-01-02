@@ -1,18 +1,29 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use parquet::file::reader::FileReader;
 use std::time::Duration;
 
 fn bench(c: &mut Criterion) {
-    let parquet_file = zn_perf::new_mem_reader(concat!(
+    let parquet_reader = zn_perf::new_mem_reader(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/dat/7013506939548213248.parquet"
+        "/dat/7013508450449760256.parquet"
     ))
     .unwrap();
 
-    let mut group = c.benchmark_group("parquet-io");
-    group.measurement_time(Duration::from_secs(30));
+    let mut total_byte_size: i64 = 0;
+    for row_group in parquet_reader.metadata().row_groups() {
+        total_byte_size = total_byte_size
+            .checked_add(row_group.total_byte_size())
+            .unwrap();
+    }
+    let total_byte_size: u64 = total_byte_size.try_into().unwrap();
 
-    group.bench_function("read-all", |b| {
-        b.iter(|| zn_perf::read_all_data(&parquet_file).unwrap())
+    let mut group = c.benchmark_group("parquet-io");
+    group
+        .measurement_time(Duration::from_secs(30))
+        .throughput(Throughput::Bytes(total_byte_size));
+
+    group.bench_function("read-everything", |b| {
+        b.iter(|| zn_perf::read_all_data(&parquet_reader).unwrap())
     });
     group.finish();
 }
