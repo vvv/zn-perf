@@ -1,6 +1,7 @@
 use clap::Parser;
-use parquet::file::reader::{FileReader, SerializedFileReader};
-use std::{fs::File, path::PathBuf};
+use parquet::file::reader::FileReader;
+use std::path::PathBuf;
+use zn_perf::ZnResult;
 
 #[derive(Debug, Parser)]
 #[command(about)]
@@ -9,11 +10,10 @@ struct Cli {
     files: Vec<PathBuf>,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> ZnResult<()> {
     let cli = Cli::parse();
     for path in cli.files {
-        let file = File::open(&path)?;
-        let file = SerializedFileReader::new(file)?;
+        let file = zn_perf::new_file_reader(&path)?;
         let file_metadata = file.metadata().file_metadata();
         println!(
             "{} has {} rows in {} row group(s)",
