@@ -1,3 +1,4 @@
+pub mod arrow;
 mod error;
 pub mod file;
 

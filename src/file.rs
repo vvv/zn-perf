@@ -56,12 +56,14 @@ pub fn byte_array_columns_uncompressed_size(metadata: &ParquetMetaData) -> u64 {
     size.try_into().expect("BUG")
 }
 
-/// Counts the occurrences of `needle` in all `BYTE ARRAY` columns of the
+/// Counts occurrences of the `needle` across [byte array] columns of the
 /// `haystack`.
 ///
 /// # Panics
 ///
 /// Panics if `needle` is empty.
+///
+/// [byte_array]: is_byte_array()
 pub fn count_occurrences<R: FileReader>(haystack: &R, needle: &[u8]) -> ZnResult<usize> {
     assert!(!needle.is_empty());
 
@@ -72,6 +74,7 @@ pub fn count_occurrences<R: FileReader>(haystack: &R, needle: &[u8]) -> ZnResult
         for (_column_name, value) in row.get_column_iter() {
             match value {
                 Field::Null => (),
+                Field::Str(s) => count += memmem::find_iter(s.as_bytes(), needle).count(),
                 Field::Bool(_) => todo!(),
                 Field::Byte(_) => todo!(),
                 Field::Short(_) => todo!(),
@@ -84,15 +87,6 @@ pub fn count_occurrences<R: FileReader>(haystack: &R, needle: &[u8]) -> ZnResult
                 Field::Float(_) => todo!(),
                 Field::Double(_) => todo!(),
                 Field::Decimal(_) => todo!(),
-                // Field::Str(s) => count += memmem::find_iter(s.as_bytes(), needle).count(),
-                Field::Str(s) => {
-                    if memmem::find(s.as_bytes(), needle).is_some() {
-                        count += 1;
-                        // We know that this row contains the needle. There is
-                        // no need to scan it any further.
-                        break;
-                    }
-                }
                 Field::Bytes(_) => todo!(),
                 Field::Date(_) => todo!(),
                 Field::TimestampMillis(_) => todo!(),
