@@ -21,7 +21,7 @@ fn main() -> ZnResult<()> {
         // `parquet::file` API
         let file = File::open(&path)?;
         let file = SerializedFileReader::new(file)?;
-        dbg!(zn_perf::count_occurrences(&file, b"us-west-2")?);
+        dbg!(zn_perf::file::count_occurrences(&file, b"us-west-2")?);
         let file_metadata = file.metadata().file_metadata();
         println!(
             "{} has {} rows in {} row group(s)",

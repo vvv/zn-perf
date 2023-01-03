@@ -27,7 +27,7 @@ fn bench_file_read(c: &mut Criterion) {
         .throughput(Throughput::Bytes(total_byte_size));
 
     group.bench_function("everything", |b| {
-        b.iter(|| zn_perf::read_all_data(&parquet_reader).unwrap())
+        b.iter(|| zn_perf::file::read_all_data(&parquet_reader).unwrap())
     });
     group.finish();
 }
@@ -35,7 +35,7 @@ fn bench_file_read(c: &mut Criterion) {
 fn bench_file_search(c: &mut Criterion) {
     let parquet_reader = parquet_file_reader();
 
-    let size = zn_perf::byte_array_columns_uncompressed_size(parquet_reader.metadata());
+    let size = zn_perf::file::byte_array_columns_uncompressed_size(parquet_reader.metadata());
 
     let mut group = c.benchmark_group("file-search");
     group
@@ -43,7 +43,7 @@ fn bench_file_search(c: &mut Criterion) {
         .throughput(Throughput::Bytes(size));
 
     group.bench_function("count-occurrences-in-str-columns", |b| {
-        b.iter(|| zn_perf::count_occurrences(&parquet_reader, b"search_string").unwrap())
+        b.iter(|| zn_perf::file::count_occurrences(&parquet_reader, b"search_string").unwrap())
     });
     group.finish();
 }
