@@ -19,7 +19,7 @@ pub fn count_occurrences(haystack: ParquetRecordBatchReader, needle: &str) -> Zn
                     count += array
                         .iter()
                         .flatten()
-                        .filter(|s| s.contains(needle))
+                        .filter(|s| s.contains(needle)) // OPTIMIZE: use `memchr`
                         .count();
                 }
                 DataType::Int64 => (),
