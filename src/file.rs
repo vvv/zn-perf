@@ -11,16 +11,6 @@ use parquet::{
     schema::types::Type as SchemaType,
 };
 
-pub fn read_all_data<R: FileReader>(file_reader: &R) -> ZnResult<()> {
-    let mut row_iter = file_reader.get_row_iter(None)?;
-    assert!(row_iter.all(|row| {
-        // Consume the row by converting it into JSON value. Then consume the
-        // JSON value by comparing it with `null`.
-        !row.to_json_value().is_null()
-    }));
-    Ok(())
-}
-
 fn is_byte_array(t: BasicType) -> bool {
     matches!(t, BasicType::BYTE_ARRAY | BasicType::FIXED_LEN_BYTE_ARRAY)
 }

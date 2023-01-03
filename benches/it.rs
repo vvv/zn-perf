@@ -25,26 +25,6 @@ fn new_parquet_arrow_reader() -> ParquetRecordBatchReader {
         .unwrap()
 }
 
-fn bench_file_read(c: &mut Criterion) {
-    let parquet_reader = new_parquet_file_reader();
-
-    let mut total_byte_size: i64 = 0;
-    for row_group in parquet_reader.metadata().row_groups() {
-        total_byte_size += row_group.total_byte_size();
-    }
-    let total_byte_size: u64 = total_byte_size.try_into().unwrap();
-
-    let mut group = c.benchmark_group("file-read");
-    group
-        .measurement_time(Duration::from_secs(30))
-        .throughput(Throughput::Bytes(total_byte_size));
-
-    group.bench_function("everything", |b| {
-        b.iter(|| zn_perf::file::read_all_data(&parquet_reader).unwrap())
-    });
-    group.finish();
-}
-
 fn bench_file_search(c: &mut Criterion) {
     let parquet_reader = new_parquet_file_reader();
 
@@ -82,10 +62,5 @@ fn bench_arrow_search(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_file_read,
-    bench_file_search,
-    bench_arrow_search
-);
+criterion_group!(benches, bench_file_search, bench_arrow_search);
 criterion_main!(benches);
