@@ -1,3 +1,4 @@
+use arrow_array::cast;
 use arrow_schema::DataType;
 use clap::Parser;
 use parquet::{arrow::arrow_reader::ParquetRecordBatchReaderBuilder, file::reader::FileReader};
@@ -30,19 +31,25 @@ fn main() -> ZnResult<()> {
         let parquet_reader = ParquetRecordBatchReaderBuilder::try_new(file)?
             .with_batch_size(8192)
             .build()?;
+        let mut nr_occurrences = 0;
         for batch in parquet_reader {
             let batch = batch?;
             for array in batch.columns() {
                 match array.data_type() {
                     DataType::Utf8 => {
-                        let array = array.as_any().downcast_ref::<StringArray>
+                        let array = cast::as_string_array(array);
+                        nr_occurrences += array
+                            .iter()
+                            .flatten()
+                            .filter(|s| s.contains("us-west-2"))
+                            .count();
                     }
+                    DataType::Int64 => (),
                     DataType::Null
                     | DataType::Boolean
                     | DataType::Int8
                     | DataType::Int16
                     | DataType::Int32
-                    | DataType::Int64
                     | DataType::UInt8
                     | DataType::UInt16
                     | DataType::UInt32
@@ -69,16 +76,11 @@ fn main() -> ZnResult<()> {
                     | DataType::Dictionary(_, _)
                     | DataType::Decimal128(_, _)
                     | DataType::Decimal256(_, _)
-                    | DataType::Map(_, _) => todo!(),
+                    | DataType::Map(_, _) => todo!("{:#?}", array.data_type()),
                 }
             }
-            // let fields = batch.schema().fields;
-            dbg!((batch.num_rows(), batch.schema().fields().len()));
-            panic!(
-                "{:#?}",
-                batch.schema().fields().iter().take(4).collect::<Vec<_>>()
-            );
         }
+        dbg!(nr_occurrences);
     }
     Ok(())
 }
