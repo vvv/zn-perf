@@ -10,7 +10,7 @@ use parquet::{
     record::Field,
     schema::types::Type as SchemaType,
 };
-use std::{fs::File, io::Read, path::Path};
+use std::{fs::File, path::Path};
 
 pub use error::{ZnError, ZnResult};
 
@@ -20,9 +20,7 @@ pub fn new_file_reader<P: AsRef<Path>>(path: P) -> ZnResult<SerializedFileReader
 }
 
 pub fn new_mem_reader<P: AsRef<Path>>(path: P) -> ZnResult<SerializedFileReader<Bytes>> {
-    let mut file = File::open(path)?;
-    let mut buf = Vec::new();
-    let _sz = file.read_to_end(&mut buf)?;
+    let buf = std::fs::read(path)?;
     Ok(SerializedFileReader::new(buf.into())?)
 }
 
