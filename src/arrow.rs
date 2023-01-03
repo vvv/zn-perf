@@ -5,10 +5,18 @@
 use crate::ZnResult;
 use arrow_array::cast;
 use arrow_schema::DataType;
+use memchr::memmem;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReader;
 
-/// XXX-DOCUMENTME
+/// Counts the number of cells (intersections of column and row) that contain
+/// the `needle`, taking only [`DataType::Utf8`] columns into account.
+///
+/// # Panics
+///
+/// Panics if the `needle` is empty.
 pub fn count_occurrences(haystack: ParquetRecordBatchReader, needle: &str) -> ZnResult<usize> {
+    assert!(!needle.is_empty());
+
     let mut count = 0;
     for batch in haystack {
         let batch = batch?;
@@ -19,7 +27,7 @@ pub fn count_occurrences(haystack: ParquetRecordBatchReader, needle: &str) -> Zn
                     count += array
                         .iter()
                         .flatten()
-                        .filter(|s| s.contains(needle)) // OPTIMIZE: use `memchr`
+                        .filter_map(|s| memmem::find(s.as_bytes(), needle.as_bytes()))
                         .count();
                 }
                 DataType::Int64 => (),
