@@ -1,7 +1,10 @@
 use arrow_array::cast;
 use arrow_schema::DataType;
 use clap::Parser;
-use parquet::{arrow::arrow_reader::ParquetRecordBatchReaderBuilder, file::reader::FileReader};
+use parquet::{
+    arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
+    file::{reader::FileReader, serialized_reader::SerializedFileReader},
+};
 use std::{fs::File, path::PathBuf};
 use zn_perf::ZnResult;
 
@@ -16,7 +19,8 @@ fn main() -> ZnResult<()> {
     let cli = Cli::parse();
     for path in cli.files {
         // `parquet::file` API
-        let file = zn_perf::new_file_reader(&path)?;
+        let file = File::open(&path)?;
+        let file = SerializedFileReader::new(file)?;
         dbg!(zn_perf::count_occurrences(&file, b"us-west-2")?);
         let file_metadata = file.metadata().file_metadata();
         println!(

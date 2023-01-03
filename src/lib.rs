@@ -1,28 +1,14 @@
 mod error;
 
-use bytes::Bytes;
 use memchr::memmem;
 use parquet::{
     basic::Type as BasicType,
-    file::{
-        metadata::ParquetMetaData, reader::FileReader, serialized_reader::SerializedFileReader,
-    },
+    file::{metadata::ParquetMetaData, reader::FileReader},
     record::Field,
     schema::types::Type as SchemaType,
 };
-use std::{fs::File, path::Path};
 
 pub use error::{ZnError, ZnResult};
-
-pub fn new_file_reader<P: AsRef<Path>>(path: P) -> ZnResult<SerializedFileReader<File>> {
-    let file = File::open(path)?;
-    Ok(SerializedFileReader::new(file)?)
-}
-
-pub fn new_mem_reader<P: AsRef<Path>>(path: P) -> ZnResult<SerializedFileReader<Bytes>> {
-    let buf = std::fs::read(path)?;
-    Ok(SerializedFileReader::new(buf.into())?)
-}
 
 pub fn read_all_data<R: FileReader>(file_reader: &R) -> ZnResult<()> {
     let mut row_iter = file_reader.get_row_iter(None)?;
