@@ -9,4 +9,7 @@ pub enum ZnError {
 
     #[error(transparent)]
     Parquet(#[from] parquet::errors::ParquetError),
+
+    #[error(transparent)]
+    Arrow(#[from] arrow_schema::ArrowError),
 }

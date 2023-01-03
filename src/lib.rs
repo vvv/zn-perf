@@ -99,7 +99,15 @@ pub fn count_occurrences<R: FileReader>(haystack: &R, needle: &[u8]) -> ZnResult
                 Field::Float(_) => todo!(),
                 Field::Double(_) => todo!(),
                 Field::Decimal(_) => todo!(),
-                Field::Str(s) => count += memmem::find_iter(s.as_bytes(), needle).count(),
+                // Field::Str(s) => count += memmem::find_iter(s.as_bytes(), needle).count(),
+                Field::Str(s) => {
+                    if memmem::find(s.as_bytes(), needle).is_some() {
+                        count += 1;
+                        // We know that this row contains the needle. There is
+                        // no need to scan it any further.
+                        break;
+                    }
+                }
                 Field::Bytes(_) => todo!(),
                 Field::Date(_) => todo!(),
                 Field::TimestampMillis(_) => todo!(),

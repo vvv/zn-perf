@@ -1,6 +1,7 @@
+use arrow_schema::DataType;
 use clap::Parser;
-use parquet::file::reader::FileReader;
-use std::path::PathBuf;
+use parquet::{arrow::arrow_reader::ParquetRecordBatchReaderBuilder, file::reader::FileReader};
+use std::{fs::File, path::PathBuf};
 use zn_perf::ZnResult;
 
 #[derive(Debug, Parser)]
@@ -13,6 +14,7 @@ struct Cli {
 fn main() -> ZnResult<()> {
     let cli = Cli::parse();
     for path in cli.files {
+        // `parquet::file` API
         let file = zn_perf::new_file_reader(&path)?;
         dbg!(zn_perf::count_occurrences(&file, b"us-west-2")?);
         let file_metadata = file.metadata().file_metadata();
@@ -22,6 +24,61 @@ fn main() -> ZnResult<()> {
             file_metadata.num_rows(),
             file.num_row_groups()
         );
+
+        // `parquet::arrow` API
+        let file = File::open(path)?;
+        let parquet_reader = ParquetRecordBatchReaderBuilder::try_new(file)?
+            .with_batch_size(8192)
+            .build()?;
+        for batch in parquet_reader {
+            let batch = batch?;
+            for array in batch.columns() {
+                match array.data_type() {
+                    DataType::Utf8 => {
+                        let array = array.as_any().downcast_ref::<StringArray>
+                    }
+                    DataType::Null
+                    | DataType::Boolean
+                    | DataType::Int8
+                    | DataType::Int16
+                    | DataType::Int32
+                    | DataType::Int64
+                    | DataType::UInt8
+                    | DataType::UInt16
+                    | DataType::UInt32
+                    | DataType::UInt64
+                    | DataType::Float16
+                    | DataType::Float32
+                    | DataType::Float64
+                    | DataType::Timestamp(_, _)
+                    | DataType::Date32
+                    | DataType::Date64
+                    | DataType::Time32(_)
+                    | DataType::Time64(_)
+                    | DataType::Duration(_)
+                    | DataType::Interval(_)
+                    | DataType::Binary
+                    | DataType::FixedSizeBinary(_)
+                    | DataType::LargeBinary
+                    | DataType::LargeUtf8
+                    | DataType::List(_)
+                    | DataType::FixedSizeList(_, _)
+                    | DataType::LargeList(_)
+                    | DataType::Struct(_)
+                    | DataType::Union(_, _, _)
+                    | DataType::Dictionary(_, _)
+                    | DataType::Decimal128(_, _)
+                    | DataType::Decimal256(_, _)
+                    | DataType::Map(_, _) => todo!(),
+                }
+            }
+            // let fields = batch.schema().fields;
+            dbg!((batch.num_rows(), batch.schema().fields().len()));
+            panic!(
+                "{:#?}",
+                batch.schema().fields().iter().take(4).collect::<Vec<_>>()
+            );
+        }
     }
     Ok(())
 }
