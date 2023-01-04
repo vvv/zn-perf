@@ -17,8 +17,8 @@ fn new_parquet_file_reader() -> SerializedFileReader<Bytes> {
 }
 
 fn new_parquet_arrow_reader() -> ParquetRecordBatchReader {
-    let file = fs::File::open(INPUT).unwrap();
-    ParquetRecordBatchReaderBuilder::try_new(file)
+    let buf = fs::read(INPUT).unwrap(); // load the entire file into memory
+    ParquetRecordBatchReaderBuilder::try_new(<Vec<u8> as Into<Bytes>>::into(buf))
         .unwrap()
         .with_batch_size(8192)
         .build()
