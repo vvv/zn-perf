@@ -1,10 +1,18 @@
 use bytes::Bytes;
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
+use datafusion::{
+    config::{
+        OPT_PARQUET_ENABLE_PAGE_INDEX, OPT_PARQUET_PUSHDOWN_FILTERS, OPT_PARQUET_REORDER_FILTERS,
+    },
+    prelude::{SessionConfig, SessionContext},
+};
+use futures::stream::StreamExt;
 use parquet::{
     arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder},
     file::{reader::FileReader, serialized_reader::SerializedFileReader},
 };
 use std::{fs, time::Duration};
+use tokio::runtime::Runtime;
 
 const INPUT: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -62,5 +70,52 @@ fn bench_arrow_search(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_file_search, bench_arrow_search);
+async fn new_datafusion_session_context() -> SessionContext {
+    // These settings are copied from
+    // https://github.com/tustvold/access-log-bench/blob/b4bdc3895bb16b9e6246332946d085264b8949cd/datafusion/src/main.rs#L27-L32
+    let config = SessionConfig::default()
+        .with_collect_statistics(true)
+        .with_batch_size(8 * 1024)
+        .set_bool(OPT_PARQUET_ENABLE_PAGE_INDEX, true)
+        .set_bool(OPT_PARQUET_PUSHDOWN_FILTERS, true)
+        .set_bool(OPT_PARQUET_REORDER_FILTERS, true);
+
+    let ctx = SessionContext::with_config(config);
+    ctx.register_parquet(
+        "logs",
+        INPUT,
+        // concat!(env!("CARGO_MANIFEST_DIR"), "/dat/logs.parquet"),
+        Default::default(),
+    )
+    .await
+    .unwrap();
+    ctx
+}
+
+fn bench_datafusion(c: &mut Criterion) {
+    const QUERIES: &[&str] = &[
+        "select * from logs",
+        "select * from logs where \"kubernetes.labels.operator.prometheus.io/name\" = 'k8s'",
+    ];
+    let rt = Runtime::new().unwrap();
+    for query in QUERIES {
+        c.bench_with_input(BenchmarkId::new("datafusion", query), query, |b, i| {
+            b.to_async(&rt).iter(|| async {
+                let ctx = new_datafusion_session_context().await;
+                let df = ctx.sql(i).await.unwrap();
+                let mut stream = df.execute_stream().await.unwrap();
+                while let Some(batch) = stream.next().await {
+                    let _ = batch.unwrap().num_rows();
+                }
+            })
+        });
+    }
+}
+
+criterion_group!(
+    benches,
+    bench_file_search,
+    bench_arrow_search,
+    bench_datafusion
+);
 criterion_main!(benches);
