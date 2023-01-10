@@ -14,6 +14,7 @@ use parquet::{
 use std::{fs, time::Duration};
 use tokio::runtime::Runtime;
 
+// XXX FIXME: Read the path from environment variable
 const INPUT: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/dat/7013508450449760256.parquet"
@@ -71,7 +72,7 @@ fn bench_arrow_search(c: &mut Criterion) {
 }
 
 async fn new_datafusion_session_context() -> SessionContext {
-    // These settings are copied from
+    // These configuration settings originate from
     // https://github.com/tustvold/access-log-bench/blob/b4bdc3895bb16b9e6246332946d085264b8949cd/datafusion/src/main.rs#L27-L32
     let config = SessionConfig::default()
         .with_collect_statistics(true)
@@ -96,7 +97,10 @@ fn bench_datafusion(c: &mut Criterion) {
     const QUERIES: &[&str] = &[
         "select * from logs",
         "select * from logs where 'kubernetes.labels.operator.prometheus.io/name' = 'k8s'",
-        "select * from logs where 'kubernetes.labels.controller-revision-hash' like 'ziox'",
+        "select * from logs where 'kubernetes.labels.controller-revision-hash' like '%ziox%'",
+        "select * from logs where log like '%k8s%'",
+        // XXX TODO: Add a query that performs search in all text columns, e.g.
+        // "select * from logs where c1 like '%spam%' or c2 like '%spam%' or ..."
     ];
     let rt = Runtime::new().unwrap();
     for query in QUERIES {
