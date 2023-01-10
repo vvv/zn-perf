@@ -95,7 +95,8 @@ async fn new_datafusion_session_context() -> SessionContext {
 fn bench_datafusion(c: &mut Criterion) {
     const QUERIES: &[&str] = &[
         "select * from logs",
-        "select * from logs where \"kubernetes.labels.operator.prometheus.io/name\" = 'k8s'",
+        "select * from logs where 'kubernetes.labels.operator.prometheus.io/name' = 'k8s'",
+        "select * from logs where 'kubernetes.labels.controller-revision-hash' like 'ziox'",
     ];
     let rt = Runtime::new().unwrap();
     for query in QUERIES {
