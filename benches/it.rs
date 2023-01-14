@@ -11,22 +11,20 @@ use parquet::{
     arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder},
     file::{reader::FileReader, serialized_reader::SerializedFileReader},
 };
-use std::{fs, time::Duration};
+use std::{env, fs, time::Duration};
 use tokio::runtime::Runtime;
 
-// XXX FIXME: Read the path from environment variable
-const INPUT: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/dat/7013508450449760256.parquet"
-);
+fn parquet_sample_path() -> String {
+    env::var("FILE").expect("Set FILE environment variable")
+}
 
 fn new_parquet_file_reader() -> SerializedFileReader<Bytes> {
-    let buf = fs::read(INPUT).unwrap(); // load the entire file into memory
+    let buf = fs::read(parquet_sample_path()).unwrap(); // load the entire file into memory
     SerializedFileReader::new(buf.into()).unwrap()
 }
 
 fn new_parquet_arrow_reader() -> ParquetRecordBatchReader {
-    let buf = fs::read(INPUT).unwrap(); // load the entire file into memory
+    let buf = fs::read(parquet_sample_path()).unwrap(); // load the entire file into memory
     ParquetRecordBatchReaderBuilder::try_new(<Vec<u8> as Into<Bytes>>::into(buf))
         .unwrap()
         .with_batch_size(8192)
@@ -82,14 +80,9 @@ async fn new_datafusion_session_context() -> SessionContext {
         .set_bool(OPT_PARQUET_REORDER_FILTERS, true);
 
     let ctx = SessionContext::with_config(config);
-    ctx.register_parquet(
-        "logs",
-        INPUT,
-        // concat!(env!("CARGO_MANIFEST_DIR"), "/dat/logs.parquet"),
-        Default::default(),
-    )
-    .await
-    .unwrap();
+    ctx.register_parquet("logs", &parquet_sample_path(), Default::default())
+        .await
+        .unwrap();
     ctx
 }
 
