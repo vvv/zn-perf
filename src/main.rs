@@ -1,7 +1,8 @@
 use clap::Parser;
+use itertools::Itertools;
 use parquet::{
     arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
-    file::{reader::FileReader, serialized_reader::SerializedFileReader},
+    file::{footer, reader::FileReader, serialized_reader::SerializedFileReader},
 };
 use std::{fs::File, path::PathBuf};
 use zn_perf::ZnResult;
@@ -30,7 +31,7 @@ fn main() -> ZnResult<()> {
     );
 
     // `parquet::arrow` API
-    let file = File::open(path)?;
+    let file = File::open(&path)?;
     let parquet_reader = ParquetRecordBatchReaderBuilder::try_new(file)?
         .with_batch_size(8192)
         .build()?;
@@ -38,6 +39,22 @@ fn main() -> ZnResult<()> {
         parquet_reader,
         "us-west-2"
     )?);
+
+    // Query metadata
+    let file = File::open(path)?;
+    let metadata = footer::parse_metadata(&file)?;
+    let schema = metadata.file_metadata().schema_descr();
+
+    for row_group in metadata.row_groups() {
+        for (column, column_schema) in row_group.columns().iter().zip_eq(schema.columns()) {
+            assert!(column.column_descr().eq(column_schema));
+            println!(
+                "XXX {:?} {:?}",
+                column_schema.physical_type(),
+                column_schema.name()
+            );
+        }
+    }
 
     Ok(())
 }

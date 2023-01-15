@@ -2671,6 +2671,7 @@ dependencies = [
  "criterion",
  "datafusion",
  "futures",
+ "itertools",
  "memchr",
  "parquet 30.0.0",
  "thiserror",
