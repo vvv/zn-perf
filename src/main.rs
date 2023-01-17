@@ -2,6 +2,7 @@ use clap::Parser;
 use itertools::Itertools;
 use parquet::{
     arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
+    basic::Type as PhysicalType,
     file::{footer, reader::FileReader, serialized_reader::SerializedFileReader},
 };
 use std::{fs::File, path::PathBuf};
@@ -48,11 +49,16 @@ fn main() -> ZnResult<()> {
     for row_group in metadata.row_groups() {
         for (column, column_schema) in row_group.columns().iter().zip_eq(schema.columns()) {
             assert!(column.column_descr().eq(column_schema));
-            println!(
-                "XXX {:?} {:?}",
+            if !matches!(
                 column_schema.physical_type(),
-                column_schema.name()
-            );
+                PhysicalType::BYTE_ARRAY | PhysicalType::FIXED_LEN_BYTE_ARRAY,
+            ) {
+                println!(
+                    "XXX {:?} {:?}",
+                    column_schema.physical_type(),
+                    column_schema.name()
+                );
+            }
         }
     }
 
