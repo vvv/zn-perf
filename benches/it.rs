@@ -1,12 +1,8 @@
 use bytes::Bytes;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
-use datafusion::{
-    config::{
-        OPT_PARQUET_ENABLE_PAGE_INDEX, OPT_PARQUET_PUSHDOWN_FILTERS, OPT_PARQUET_REORDER_FILTERS,
-    },
-    prelude::{SessionConfig, SessionContext},
-};
+use datafusion::prelude::{SessionConfig, SessionContext};
 use futures::stream::StreamExt;
+use itertools::Itertools;
 use parquet::{
     arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder},
     file::{reader::FileReader, serialized_reader::SerializedFileReader},
@@ -72,12 +68,22 @@ fn bench_arrow_search(c: &mut Criterion) {
 async fn new_datafusion_session_context() -> SessionContext {
     // These configuration settings originate from
     // https://github.com/tustvold/access-log-bench/blob/b4bdc3895bb16b9e6246332946d085264b8949cd/datafusion/src/main.rs#L27-L32
+    //
+    // See also:
+    // - https://arrow.apache.org/datafusion/user-guide/configs.html
+    // - https://github.com/apache/arrow-datafusion/blob/9bee14ebd39dacbb66a9b1f34cd6494bc6a6be3f/datafusion/core/src/config.rs#L61
     let config = SessionConfig::default()
         .with_collect_statistics(true)
         .with_batch_size(8 * 1024)
-        .set_bool(OPT_PARQUET_ENABLE_PAGE_INDEX, true)
-        .set_bool(OPT_PARQUET_PUSHDOWN_FILTERS, true)
-        .set_bool(OPT_PARQUET_REORDER_FILTERS, true);
+        // use parquet data page level metadata (Page Index) statistics to
+        // reduce the number of rows decoded
+        .set_bool("datafusion.execution.parquet.enable_page_index", true)
+        // filter expressions are be applied during the parquet decoding
+        // operation to reduce the number of rows decoded
+        .set_bool("datafusion.execution.parquet.pushdown_filters", true)
+        // filter expressions evaluated during the parquet decoding opearation
+        // will be reordered heuristically to minimize the cost of evaluation
+        .set_bool("datafusion.execution.parquet.reorder_filters", true);
 
     let ctx = SessionContext::with_config(config);
     ctx.register_parquet("logs", &parquet_sample_path(), Default::default())
@@ -86,14 +92,12 @@ async fn new_datafusion_session_context() -> SessionContext {
     ctx
 }
 
-fn bench_datafusion(c: &mut Criterion) {
+fn bench_datafusion_1(c: &mut Criterion) {
     const QUERIES: &[&str] = &[
         "select * from logs",
         "select * from logs where 'kubernetes.labels.operator.prometheus.io/name' = 'k8s'",
         "select * from logs where 'kubernetes.labels.controller-revision-hash' like '%ziox%'",
         "select * from logs where log like '%k8s%'",
-        // XXX TODO: Add a query that performs search in all text columns, e.g.
-        // "select * from logs where c1 like '%spam%' or c2 like '%spam%' or ..."
     ];
     let rt = Runtime::new().unwrap();
     for query in QUERIES {
@@ -110,10 +114,45 @@ fn bench_datafusion(c: &mut Criterion) {
     }
 }
 
+fn bench_datafusion_2(c: &mut Criterion) {
+    let f = fs::File::open(parquet_sample_path()).unwrap();
+
+    let mut total_size = 0; // uncompressed size of text columns
+    let where_clause = zn_perf::metadata::text_columns(&f)
+        .unwrap()
+        .iter()
+        .map(|(name, size)| {
+            total_size += *size;
+            format!("'{name}' like '%needle%'")
+        })
+        .join(" or ");
+    let sql = format!("select * from logs where {where_clause}");
+
+    let mut group = c.benchmark_group("datafusion");
+    group.throughput(Throughput::Bytes(total_size));
+
+    let rt = Runtime::new().unwrap();
+    group.bench_with_input(
+        BenchmarkId::new("search-across-text-columns", &sql),
+        &sql,
+        |b, i| {
+            b.to_async(&rt).iter(|| async {
+                let ctx = new_datafusion_session_context().await;
+                let df = ctx.sql(i).await.unwrap();
+                let mut stream = df.execute_stream().await.unwrap();
+                while let Some(batch) = stream.next().await {
+                    let _ = batch.unwrap().num_rows();
+                }
+            })
+        },
+    );
+}
+
 criterion_group!(
     benches,
     bench_file_search,
     bench_arrow_search,
-    bench_datafusion
+    bench_datafusion_1,
+    bench_datafusion_2,
 );
 criterion_main!(benches);
