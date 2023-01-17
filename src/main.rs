@@ -1,5 +1,4 @@
 use clap::Parser;
-use itertools::Itertools;
 use parquet::{
     arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     basic::Type as PhysicalType,
@@ -44,21 +43,21 @@ fn main() -> ZnResult<()> {
     // Query metadata
     let file = File::open(path)?;
     let metadata = footer::parse_metadata(&file)?;
-    let schema = metadata.file_metadata().schema_descr();
 
     for row_group in metadata.row_groups() {
-        for (column, column_schema) in row_group.columns().iter().zip_eq(schema.columns()) {
-            assert!(column.column_descr().eq(column_schema));
+        for column in row_group.columns() {
+            let column_descr = column.column_descr();
             if !matches!(
-                column_schema.physical_type(),
+                column_descr.physical_type(),
                 PhysicalType::BYTE_ARRAY | PhysicalType::FIXED_LEN_BYTE_ARRAY,
             ) {
-                println!(
-                    "XXX {:?} {:?}",
-                    column_schema.physical_type(),
-                    column_schema.name()
-                );
+                continue;
             }
+            println!(
+                "XXX {:?} {:?}",
+                column_descr.physical_type(),
+                column_descr.name()
+            );
         }
     }
 
