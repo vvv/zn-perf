@@ -1,8 +1,7 @@
 use clap::Parser;
 use parquet::{
     arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
-    basic::Type as PhysicalType,
-    file::{footer, reader::FileReader, serialized_reader::SerializedFileReader},
+    file::{reader::FileReader, serialized_reader::SerializedFileReader},
 };
 use std::{fs::File, path::PathBuf};
 use zn_perf::ZnResult;
@@ -42,24 +41,7 @@ fn main() -> ZnResult<()> {
 
     // Query metadata
     let file = File::open(path)?;
-    let metadata = footer::parse_metadata(&file)?;
-
-    for row_group in metadata.row_groups() {
-        for column in row_group.columns() {
-            let column_descr = column.column_descr();
-            if !matches!(
-                column_descr.physical_type(),
-                PhysicalType::BYTE_ARRAY | PhysicalType::FIXED_LEN_BYTE_ARRAY,
-            ) {
-                continue;
-            }
-            println!(
-                "XXX {:?} {:?}",
-                column_descr.physical_type(),
-                column_descr.name()
-            );
-        }
-    }
+    dbg!(zn_perf::metadata::text_columns(&file)?);
 
     Ok(())
 }
