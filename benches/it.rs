@@ -99,9 +99,13 @@ fn bench_datafusion_1(c: &mut Criterion) {
         "select * from logs where 'kubernetes.labels.controller-revision-hash' like '%ziox%'",
         "select * from logs where log like '%k8s%'",
     ];
+
+    let mut group = c.benchmark_group("datafusion");
+    group.measurement_time(Duration::from_secs(15));
+
     let rt = Runtime::new().unwrap();
     for query in QUERIES {
-        c.bench_with_input(BenchmarkId::new("datafusion", query), query, |b, i| {
+        group.bench_with_input(BenchmarkId::new("queries", query), query, |b, i| {
             b.to_async(&rt).iter(|| async {
                 let ctx = new_datafusion_session_context().await;
                 let df = ctx.sql(i).await.unwrap();
@@ -123,7 +127,7 @@ fn bench_datafusion_2(c: &mut Criterion) {
         .iter()
         .map(|(name, size)| {
             total_size += *size;
-            format!("'{name}' like '%needle%'")
+            format!("'{name}' like '%k8s%'")
         })
         .join(" or ");
     let sql = format!("select * from logs where {where_clause}");
@@ -133,7 +137,7 @@ fn bench_datafusion_2(c: &mut Criterion) {
 
     let rt = Runtime::new().unwrap();
     group.bench_with_input(
-        BenchmarkId::new("search-across-text-columns", &sql),
+        BenchmarkId::new("search-in-all-text-columns", &sql),
         &sql,
         |b, i| {
             b.to_async(&rt).iter(|| async {

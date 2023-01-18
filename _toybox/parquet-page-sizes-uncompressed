@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -eu -o pipefail
+
+if (( $# != 1 )); then
+    echo >&2 "Usage: ${0##*/} <parquet-file>"
+    exit 1
+fi
+
+parquet-layout "$1" | \
+    jq -cr '
+        .row_groups[0].columns
+      | map(
+            .path as $path
+          | .pages
+	  | map({uncompressed_bytes, path: $path})
+        )
+      | flatten
+      | map([.uncompressed_bytes, .path] | join(" "))
+      | .[]
+    ' | \
+    sort -t' ' -k1,1 -n -r
