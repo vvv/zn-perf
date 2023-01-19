@@ -86,21 +86,23 @@ async fn new_datafusion_session_context() -> SessionContext {
         .set_bool("datafusion.execution.parquet.reorder_filters", true);
 
     let ctx = SessionContext::with_config(config);
-    ctx.register_parquet("logs", &parquet_sample_path(), Default::default())
+    ctx.register_parquet("tbl", &parquet_sample_path(), Default::default())
         .await
         .unwrap();
     ctx
 }
 
-fn bench_datafusion_1(c: &mut Criterion) {
+fn bench_datafusion_queries(c: &mut Criterion) {
+    return;
     const QUERIES: &[&str] = &[
-        "select * from logs",
-        "select * from logs where 'kubernetes.labels.operator.prometheus.io/name' = 'k8s'",
-        "select * from logs where 'kubernetes.labels.controller-revision-hash' like '%ziox%'",
-        "select * from logs where log like '%k8s%'",
+        "select * from tbl",
+        r#"select * from tbl where "kubernetes.labels.operator.prometheus.io/name" = 'k8s'"#,
+        r#"select * from tbl where kubernetes.labels.controller-revision-hash like '%ziox%'"#,
+        "select * from tbl where log like '%k8s%'",
+        "select * from tbl where strpos(log, 'k8s') > 0",
     ];
 
-    let mut group = c.benchmark_group("datafusion");
+    let mut group = c.benchmark_group("DF");
     group.measurement_time(Duration::from_secs(15));
 
     let rt = Runtime::new().unwrap();
@@ -112,13 +114,14 @@ fn bench_datafusion_1(c: &mut Criterion) {
                 let mut stream = df.execute_stream().await.unwrap();
                 while let Some(batch) = stream.next().await {
                     let _ = batch.unwrap().num_rows();
+                    unreachable!("XXX");
                 }
             })
         });
     }
 }
 
-fn bench_datafusion_2(c: &mut Criterion) {
+fn bench_datafusion_search(c: &mut Criterion) {
     let f = fs::File::open(parquet_sample_path()).unwrap();
 
     let mut total_size = 0; // uncompressed size of text columns
@@ -127,17 +130,18 @@ fn bench_datafusion_2(c: &mut Criterion) {
         .iter()
         .map(|(name, size)| {
             total_size += *size;
-            format!("'{name}' like '%k8s%'")
+            format!("\"{name}\" like '%k8s%'")
         })
         .join(" or ");
-    let sql = format!("select * from logs where {where_clause}");
+    let sql = format!("select * from tbl where {where_clause}");
+    dbg!(("XXX", &sql));
 
-    let mut group = c.benchmark_group("datafusion");
+    let mut group = c.benchmark_group("DF");
     group.throughput(Throughput::Bytes(total_size));
 
     let rt = Runtime::new().unwrap();
     group.bench_with_input(
-        BenchmarkId::new("search-in-all-text-columns", &sql),
+        BenchmarkId::new("search", &sql),
         &sql,
         |b, i| {
             b.to_async(&rt).iter(|| async {
@@ -146,6 +150,7 @@ fn bench_datafusion_2(c: &mut Criterion) {
                 let mut stream = df.execute_stream().await.unwrap();
                 while let Some(batch) = stream.next().await {
                     let _ = batch.unwrap().num_rows();
+                    unreachable!("XXX");
                 }
             })
         },
@@ -156,7 +161,7 @@ criterion_group!(
     benches,
     bench_file_search,
     bench_arrow_search,
-    bench_datafusion_1,
-    bench_datafusion_2,
+    bench_datafusion_queries,
+    bench_datafusion_search,
 );
 criterion_main!(benches);
