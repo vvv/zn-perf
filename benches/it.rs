@@ -93,28 +93,26 @@ async fn new_datafusion_session_context() -> SessionContext {
 }
 
 fn bench_datafusion_queries(c: &mut Criterion) {
-    return;
     const QUERIES: &[&str] = &[
         "select * from tbl",
         r#"select * from tbl where "kubernetes.labels.operator.prometheus.io/name" = 'k8s'"#,
-        r#"select * from tbl where kubernetes.labels.controller-revision-hash like '%ziox%'"#,
+        r#"select * from tbl where "kubernetes.labels.controller-revision-hash" like '%ziox%'"#,
         "select * from tbl where log like '%k8s%'",
         "select * from tbl where strpos(log, 'k8s') > 0",
     ];
 
-    let mut group = c.benchmark_group("DF");
+    let mut group = c.benchmark_group("datafusion/queries");
     group.measurement_time(Duration::from_secs(15));
 
     let rt = Runtime::new().unwrap();
     for query in QUERIES {
-        group.bench_with_input(BenchmarkId::new("queries", query), query, |b, i| {
+        group.bench_function(BenchmarkId::from_parameter(query), |b| {
             b.to_async(&rt).iter(|| async {
                 let ctx = new_datafusion_session_context().await;
-                let df = ctx.sql(i).await.unwrap();
+                let df = ctx.sql(query).await.unwrap();
                 let mut stream = df.execute_stream().await.unwrap();
                 while let Some(batch) = stream.next().await {
                     let _ = batch.unwrap().num_rows();
-                    unreachable!("XXX");
                 }
             })
         });
@@ -123,38 +121,50 @@ fn bench_datafusion_queries(c: &mut Criterion) {
 
 fn bench_datafusion_search(c: &mut Criterion) {
     let f = fs::File::open(parquet_sample_path()).unwrap();
-
     let mut total_size = 0; // uncompressed size of text columns
-    let where_clause = zn_perf::metadata::text_columns(&f)
+    let text_columns = zn_perf::metadata::text_columns(&f)
         .unwrap()
-        .iter()
-        .map(|(name, size)| {
-            total_size += *size;
-            format!("\"{name}\" like '%k8s%'")
+        .into_iter()
+        .filter_map(|(name, size)| {
+            // HACK: `SessionContext::sql()` doesn't like "@timestamp" column:
+            // ```
+            // thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Execution("variable [\"@timestamp\"] has no type information")'
+            // ```
+            (name != "@timestamp").then(|| {
+                total_size += size;
+                name
+            })
         })
-        .join(" or ");
-    let sql = format!("select * from tbl where {where_clause}");
-    dbg!(("XXX", &sql));
+        .collect_vec();
 
-    let mut group = c.benchmark_group("DF");
+    let mut group = c.benchmark_group("datafusion/search");
     group.throughput(Throughput::Bytes(total_size));
 
-    let rt = Runtime::new().unwrap();
-    group.bench_with_input(
-        BenchmarkId::new("search", &sql),
-        &sql,
-        |b, i| {
+    for op in ["like", "strpos"] {
+        let where_clause = text_columns
+            .iter()
+            .map(|column| {
+                if op == "like" {
+                    format!("\"{column}\" like '%k8s%'")
+                } else {
+                    format!("strpos(\"{column}\", 'k8s') > 0")
+                }
+            })
+            .join(" or ");
+        let sql = format!("select * from tbl where {where_clause}");
+
+        let rt = Runtime::new().unwrap();
+        group.bench_function(BenchmarkId::from_parameter(op), |b| {
             b.to_async(&rt).iter(|| async {
                 let ctx = new_datafusion_session_context().await;
-                let df = ctx.sql(i).await.unwrap();
+                let df = ctx.sql(&sql).await.unwrap();
                 let mut stream = df.execute_stream().await.unwrap();
                 while let Some(batch) = stream.next().await {
                     let _ = batch.unwrap().num_rows();
-                    unreachable!("XXX");
                 }
             })
-        },
-    );
+        });
+    }
 }
 
 criterion_group!(
