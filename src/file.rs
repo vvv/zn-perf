@@ -46,14 +46,14 @@ pub fn byte_array_columns_uncompressed_size(metadata: &ParquetMetaData) -> u64 {
     size.try_into().expect("BUG")
 }
 
-/// Counts occurrences of the `needle` across [byte array] columns of the
-/// `haystack`.
+/// Counts the number of cells (intersections of column and row) that contain
+/// the `needle`, taking only [byte array] columns into account.
 ///
 /// # Panics
 ///
 /// Panics if `needle` is empty.
 ///
-/// [byte_array]: is_byte_array()
+/// [byte array]: is_byte_array()
 pub fn count_occurrences<R: FileReader>(haystack: &R, needle: &[u8]) -> ZnResult<usize> {
     assert!(!needle.is_empty());
 
@@ -64,7 +64,12 @@ pub fn count_occurrences<R: FileReader>(haystack: &R, needle: &[u8]) -> ZnResult
         for (_column_name, value) in row.get_column_iter() {
             match value {
                 Field::Null => (),
-                Field::Str(s) => count += memmem::find_iter(s.as_bytes(), needle).count(),
+                // Field::Str(s) => count += memmem::find_iter(s.as_bytes(), needle).count(),
+                Field::Str(s) => {
+                    if memmem::find(s.as_bytes(), needle).is_some() {
+                        count += 1;
+                    }
+                }
                 Field::Bool(_) => todo!(),
                 Field::Byte(_) => todo!(),
                 Field::Short(_) => todo!(),
