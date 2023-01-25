@@ -1,6 +1,5 @@
 use bytes::Bytes;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
-use datafusion::prelude::{SessionConfig, SessionContext};
 use futures::stream::StreamExt;
 use itertools::Itertools;
 use parquet::{
@@ -65,27 +64,8 @@ fn bench_arrow_search(c: &mut Criterion) {
     group.finish();
 }
 
-async fn new_datafusion_session_context() -> SessionContext {
-    // These configuration settings originate from
-    // https://github.com/tustvold/access-log-bench/blob/b4bdc3895bb16b9e6246332946d085264b8949cd/datafusion/src/main.rs#L27-L32
-    //
-    // See also:
-    // - https://arrow.apache.org/datafusion/user-guide/configs.html
-    // - https://github.com/apache/arrow-datafusion/blob/9bee14ebd39dacbb66a9b1f34cd6494bc6a6be3f/datafusion/core/src/config.rs#L61
-    let config = SessionConfig::default()
-        .with_collect_statistics(true)
-        .with_batch_size(8 * 1024)
-        // use parquet data page level metadata (Page Index) statistics to
-        // reduce the number of rows decoded
-        .set_bool("datafusion.execution.parquet.enable_page_index", true)
-        // filter expressions are be applied during the parquet decoding
-        // operation to reduce the number of rows decoded
-        .set_bool("datafusion.execution.parquet.pushdown_filters", true)
-        // filter expressions evaluated during the parquet decoding opearation
-        // will be reordered heuristically to minimize the cost of evaluation
-        .set_bool("datafusion.execution.parquet.reorder_filters", true);
-
-    let ctx = SessionContext::with_config(config);
+async fn new_datafusion_session_context() -> datafusion::prelude::SessionContext {
+    let ctx = zn_perf::datafusion::new_session_context();
     ctx.register_parquet("tbl", &parquet_sample_path(), Default::default())
         .await
         .unwrap();
