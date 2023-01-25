@@ -18,13 +18,21 @@ fn new_parquet_file_reader() -> SerializedFileReader<Bytes> {
     SerializedFileReader::new(buf.into()).unwrap()
 }
 
-fn new_parquet_arrow_reader() -> ParquetRecordBatchReader {
+fn new_parquet_arrow_reader(batch_size: usize) -> ParquetRecordBatchReader {
     let buf = fs::read(parquet_sample_path()).unwrap(); // load the entire file into memory
     ParquetRecordBatchReaderBuilder::try_new(<Vec<u8> as Into<Bytes>>::into(buf))
         .unwrap()
-        .with_batch_size(8192)
+        .with_batch_size(batch_size)
         .build()
         .unwrap()
+}
+
+async fn new_datafusion_session_context() -> datafusion::prelude::SessionContext {
+    let ctx = zn_perf::datafusion::new_session_context();
+    ctx.register_parquet("tbl", &parquet_sample_path(), Default::default())
+        .await
+        .unwrap();
+    ctx
 }
 
 fn bench_file_search(c: &mut Criterion) {
@@ -44,32 +52,28 @@ fn bench_file_search(c: &mut Criterion) {
 }
 
 fn bench_arrow_search(c: &mut Criterion) {
-    let size: usize = new_parquet_arrow_reader()
+    let size: usize = new_parquet_arrow_reader(4096)
         .into_iter()
         .map(|batch| batch.unwrap().get_array_memory_size())
         .sum();
 
     let mut group = c.benchmark_group("arrow-search");
-    group.throughput(Throughput::Bytes(size as u64));
+    group
+        .measurement_time(Duration::from_secs(8))
+        .throughput(Throughput::Bytes(size as u64));
 
-    group.bench_function("count-occurrences", |b| {
-        b.iter_batched(
-            new_parquet_arrow_reader,
-            |parquet_reader| {
-                zn_perf::arrow::count_occurrences(parquet_reader, "search_string").unwrap()
-            },
-            BatchSize::SmallInput,
-        )
-    });
+    for batch_size in [128, 256, 512, 1024, 4096, 8192] {
+        group.bench_function(BenchmarkId::from_parameter(batch_size), |b| {
+            b.iter_batched(
+                || new_parquet_arrow_reader(batch_size),
+                |parquet_reader| {
+                    zn_perf::arrow::count_occurrences(parquet_reader, "search_string").unwrap()
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
     group.finish();
-}
-
-async fn new_datafusion_session_context() -> datafusion::prelude::SessionContext {
-    let ctx = zn_perf::datafusion::new_session_context();
-    ctx.register_parquet("tbl", &parquet_sample_path(), Default::default())
-        .await
-        .unwrap();
-    ctx
 }
 
 fn bench_datafusion_queries(c: &mut Criterion) {
@@ -97,6 +101,7 @@ fn bench_datafusion_queries(c: &mut Criterion) {
             })
         });
     }
+    group.finish();
 }
 
 fn bench_datafusion_search(c: &mut Criterion) {
