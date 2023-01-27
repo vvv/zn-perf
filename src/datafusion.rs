@@ -1,6 +1,6 @@
 use datafusion::execution::context::{SessionConfig, SessionContext};
 
-pub fn new_session_context() -> SessionContext {
+pub fn new_session_context(batch_size: usize) -> SessionContext {
     // These configuration settings originate from
     // https://github.com/tustvold/access-log-bench/blob/b4bdc3895bb16b9e6246332946d085264b8949cd/datafusion/src/main.rs#L27-L32
     //
@@ -9,7 +9,7 @@ pub fn new_session_context() -> SessionContext {
     // - https://github.com/apache/arrow-datafusion/blob/9bee14ebd39dacbb66a9b1f34cd6494bc6a6be3f/datafusion/core/src/config.rs#L61
     let cfg = SessionConfig::default()
         .with_collect_statistics(true)
-        .with_batch_size(8 * 1024)
+        .with_batch_size(batch_size)
         // use parquet data page level metadata (Page Index) statistics to
         // reduce the number of rows decoded
         .set_bool("datafusion.execution.parquet.enable_page_index", true)

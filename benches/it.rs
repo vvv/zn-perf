@@ -28,7 +28,7 @@ fn new_parquet_arrow_reader(batch_size: usize) -> ParquetRecordBatchReader {
 }
 
 async fn new_datafusion_session_context() -> datafusion::prelude::SessionContext {
-    let ctx = zn_perf::datafusion::new_session_context();
+    let ctx = zn_perf::datafusion::new_session_context(8192);
     ctx.register_parquet("tbl", &parquet_sample_path(), Default::default())
         .await
         .unwrap();
@@ -150,6 +150,7 @@ fn bench_datafusion_search(c: &mut Criterion) {
             })
         });
     }
+    group.finish();
 }
 
 criterion_group!(
