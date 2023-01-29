@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -eu -o pipefail
+
+main() {
+    cd $(git rev-parse --show-toplevel)
+
+    local f stem
+    for f in report_*.gz; do
+        [[ -r "$f" ]] || continue
+
+        stem="${f##*/}"
+        stem="${stem#report_}"
+        stem="${stem%%.*}"
+        gzip -dc "$f" |
+            jq --arg file "$stem" '
+                select( .reason == "benchmark-complete"
+                      # "datafusion/queries" benchmarks are noisy, exclude them
+                      and (.id | contains("datafusion/queries") | not)
+                      )
+              | { benchmark: .id
+                , file: $file
+                , time_ms: (.typical.estimate / 1000000)
+                }
+            '
+    done |
+        jq --slurp --raw-output '
+            sort_by(.time_ms)
+          # Convert to CSV
+          | (.[0] | keys_unsorted) as $cols
+          | map(. as $row | $cols | map($row[.])) as $rows
+          | $cols, $rows[]
+          | @csv
+        '
+}
+
+main "$@"
