@@ -27,8 +27,11 @@ fn new_parquet_arrow_reader(batch_size: usize) -> ParquetRecordBatchReader {
         .unwrap()
 }
 
-async fn new_datafusion_session_context(batch_size: usize) -> datafusion::prelude::SessionContext {
-    let ctx = zn_perf::datafusion::new_session_context(batch_size);
+async fn new_datafusion_session_context(
+    batch_size: usize,
+    optimized_p: bool,
+) -> datafusion::prelude::SessionContext {
+    let ctx = zn_perf::datafusion::new_session_context(batch_size, optimized_p);
     ctx.register_parquet("tbl", &parquet_sample_path(), Default::default())
         .await
         .unwrap();
@@ -91,19 +94,24 @@ fn bench_datafusion_queries(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     for query in QUERIES {
         for batch_size in [128, 256, 512, 1024, 4096, 8192] {
-            group.bench_function(
-                BenchmarkId::from_parameter(format!("{batch_size}/{query}")),
-                |b| {
-                    b.to_async(&rt).iter(|| async {
-                        let ctx = new_datafusion_session_context(batch_size).await;
-                        let df = ctx.sql(query).await.unwrap();
-                        let mut stream = df.execute_stream().await.unwrap();
-                        while let Some(batch) = stream.next().await {
-                            let _ = batch.unwrap().num_rows();
-                        }
-                    })
-                },
-            );
+            for optimized_p in [true, false] {
+                group.bench_function(
+                    BenchmarkId::from_parameter(format!(
+                        "{batch_size}-O{}/{query}",
+                        optimized_p as u8
+                    )),
+                    |b| {
+                        b.to_async(&rt).iter(|| async {
+                            let ctx = new_datafusion_session_context(batch_size, optimized_p).await;
+                            let df = ctx.sql(query).await.unwrap();
+                            let mut stream = df.execute_stream().await.unwrap();
+                            while let Some(batch) = stream.next().await {
+                                let _ = batch.unwrap().num_rows();
+                            }
+                        })
+                    },
+                );
+            }
         }
     }
     group.finish();
@@ -132,32 +140,37 @@ fn bench_datafusion_search(c: &mut Criterion) {
 
     for batch_size in [128, 256, 512, 1024, 4096, 8192] {
         for op in ["like", "strpos"] {
-            let where_clause = text_columns
-                .iter()
-                .map(|column| {
-                    if op == "like" {
-                        format!("\"{column}\" like '%k8s%'")
-                    } else {
-                        format!("strpos(\"{column}\", 'k8s') > 0")
-                    }
-                })
-                .join(" or ");
-            let sql = format!("select * from tbl where {where_clause}");
-
-            let rt = Runtime::new().unwrap();
-            group.bench_function(
-                BenchmarkId::from_parameter(format!("{batch_size}/{op}")),
-                |b| {
-                    b.to_async(&rt).iter(|| async {
-                        let ctx = new_datafusion_session_context(batch_size).await;
-                        let df = ctx.sql(&sql).await.unwrap();
-                        let mut stream = df.execute_stream().await.unwrap();
-                        while let Some(batch) = stream.next().await {
-                            let _ = batch.unwrap().num_rows();
+            for optimized_p in [true, false] {
+                let where_clause = text_columns
+                    .iter()
+                    .map(|column| {
+                        if op == "like" {
+                            format!("\"{column}\" like '%k8s%'")
+                        } else {
+                            format!("strpos(\"{column}\", 'k8s') > 0")
                         }
                     })
-                },
-            );
+                    .join(" or ");
+                let sql = format!("select * from tbl where {where_clause}");
+
+                let rt = Runtime::new().unwrap();
+                group.bench_function(
+                    BenchmarkId::from_parameter(format!(
+                        "{batch_size}-O{}/{op}",
+                        optimized_p as u8
+                    )),
+                    |b| {
+                        b.to_async(&rt).iter(|| async {
+                            let ctx = new_datafusion_session_context(batch_size, optimized_p).await;
+                            let df = ctx.sql(&sql).await.unwrap();
+                            let mut stream = df.execute_stream().await.unwrap();
+                            while let Some(batch) = stream.next().await {
+                                let _ = batch.unwrap().num_rows();
+                            }
+                        })
+                    },
+                );
+            }
         }
     }
     group.finish();
