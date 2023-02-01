@@ -18,7 +18,7 @@ See also https://crates.io/crates/arrow#performance-tips
 Specify the path to parquet file via `FILE` environment variable, e.g.
 
 ``` sh
-FILE=dat/7013506939548213248.parquet \
+FILE=data/k8slog1.parquet \
 RUSTFLAGS='-C target-cpu=native' \
 cargo bench
 ```

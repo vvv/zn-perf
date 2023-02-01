@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -eu -o pipefail
+
+time for f in data/k8slog1*; do
+    echo "## $f"
+    stem=${f##*/}
+    stem=${stem%%.*}
+    FILE=$f cargo criterion --message-format json | gzip > report_$stem.json.gz
+done
+unset f stem
